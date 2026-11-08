@@ -11,12 +11,14 @@ import com.better.heybox.App
 import com.better.heybox.ForegroundTracker
 import com.better.heybox.LogRecorder
 import com.better.heybox.MainModule
+import com.better.heybox.liquidglass.LiquidGlassInstaller
 import java.lang.reflect.Method
 import java.util.concurrent.atomic.AtomicBoolean
 
 class GeneralHook(private val module: MainModule) {
 
     fun install(cl: ClassLoader) {
+        hookFullImmersive(cl)
         hookVersionNotice(cl)
         hookUpdateBlocking(cl)
         hookFakeNotification(cl)
@@ -36,6 +38,32 @@ class GeneralHook(private val module: MainModule) {
             module.logd(Log.INFO, MainModule.TAG, "✔ 伪装通知权限 Hook 已安装")
         } catch (t: Throwable) {
             module.logd(Log.ERROR, MainModule.TAG, "✘ 伪装通知权限 Hook 失败", t)
+        }
+    }
+
+    /**
+     * fork 定制：导航条沉浸做全界面。
+     * 上游只给主界面调 applyImmersive，帖子详情、查看图片等页面都不沉浸。
+     * 这里对进程内每个 Activity 的 onResume 都补一次 applyImmersive；
+     * 是否生效仍由设置里的「沉浸式手势导航」开关决定（apply 内部处理）。
+     */
+    private fun hookFullImmersive(cl: ClassLoader) {
+        try {
+            val activityClass = Class.forName("android.app.Activity", false, cl)
+            val onResume = activityClass.getDeclaredMethod("onResume")
+            module.hook(onResume).intercept { chain ->
+                val result = chain.proceed()
+                val activity = chain.instanceOrNull as? Activity
+                if (activity != null &&
+                    !activity.javaClass.name.startsWith("com.better.heybox")
+                ) {
+                    LiquidGlassInstaller.applyImmersive(activity)
+                }
+                result
+            }
+            module.logd(Log.INFO, MainModule.TAG, "✔ 全界面导航条沉浸 Hook 已安装（fork 定制）")
+        } catch (t: Throwable) {
+            module.logd(Log.ERROR, MainModule.TAG, "✘ 全界面导航条沉浸 Hook 失败", t)
         }
     }
 

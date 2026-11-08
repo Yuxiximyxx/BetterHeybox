@@ -15,6 +15,7 @@ import com.better.heybox.hooks.BottomTabUpdateHook
 import com.better.heybox.hooks.BrowserRedirectHook
 import com.better.heybox.hooks.CommentCopyHook
 import com.better.heybox.hooks.CommentFilterHook
+import com.better.heybox.hooks.CommentInputDockHook
 import com.better.heybox.hooks.CommentSharePanelHook
 import com.better.heybox.hooks.DailyTaskHook
 import com.better.heybox.hooks.FakeUsageAccessHook
@@ -252,6 +253,7 @@ class MainModule private constructor(private val param: PackageParam) {
 
         val postFilter = PostFilterHook(this)
         registerHook("通用", GeneralHook(this)::install, cl)
+        registerHook("评论输入框贴合", CommentInputDockHook(this)::install, cl)
         registerHook("广告过滤", AdFilterHook(this)::install, cl,
             App.KEY_OPEN_SCREEN, App.KEY_FEED_AD, App.KEY_BUBBLE_AD, App.KEY_CORNER_AD)
         registerHook("设置入口", SettingsEntryHook(this)::install, cl)
