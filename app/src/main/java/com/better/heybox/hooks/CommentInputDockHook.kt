@@ -92,13 +92,16 @@ class CommentInputDockHook(private val module: MainModule) {
     }
 
     private fun dock(input: EditText) {
+        // v0.10.1 改法：v0.10.0 清边距把输入框内部布局顶坏了（文字贴边
+        // 裁切），因为小黑盒的输入框靠容器边距留白。这里不动任何布局
+        // 参数，只给卡片外层（面板根，限非全屏高度）铺上卡片同色背景，
+        // 让卡片沉进整块面板，视觉上与键盘连成一体。
         var card: View? = null
         var current: View? = input
         var depth = 0
         while (current != null && depth++ < 8) {
             val parent = current.parent as? View ?: break
-            val lp = parent.layoutParams as? ViewGroup.MarginLayoutParams
-            if (lp != null && (lp.leftMargin > 0 || lp.rightMargin > 0)) {
+            if (parent.background != null) {
                 card = parent
                 break
             }
@@ -106,23 +109,17 @@ class CommentInputDockHook(private val module: MainModule) {
         }
         val target = card ?: (input.parent as? View) ?: return
         val color = backgroundColor(target.background, target)
-        zeroMargins(target)
-        target.background = ColorDrawable(color)
-        val block = target.parent as? View
-        if (block != null) {
-            block.background = ColorDrawable(color)
-            zeroMargins(block)
+        val rootHeight = input.rootView?.height ?: Int.MAX_VALUE
+        var level: View? = target.parent as? View
+        var painted = 0
+        while (level != null && painted < 2) {
+            if (level.height > rootHeight * 0.5) break
+            level.background = ColorDrawable(color)
+            level = level.parent as? View
+            painted++
         }
         styled.add(input)
         module.logd(Log.INFO, MainModule.TAG, "评论输入框已贴合（fork 定制）")
-    }
-
-    private fun zeroMargins(view: View) {
-        val lp = view.layoutParams as? ViewGroup.MarginLayoutParams ?: return
-        lp.leftMargin = 0
-        lp.rightMargin = 0
-        lp.bottomMargin = 0
-        view.layoutParams = lp
     }
 
     private fun backgroundColor(drawable: Drawable?, anchor: View): Int {

@@ -33,6 +33,18 @@ internal object WindowImmersiveController {
 
     @JvmStatic
     fun apply(activity: Activity) {
+        applyInternal(activity, true)
+    }
+
+    /** fork 定制：轻量沉浸——只透明导航条，不动窗口 insets。
+     *  全量版会把导航条 inset 清零，个别页面（搜索页）的布局依赖这个
+     *  inset 算位置，清零后顶部搜索框会被顶出屏幕；非主界面用轻量版。 */
+    @JvmStatic
+    fun applyLite(activity: Activity) {
+        applyInternal(activity, false)
+    }
+
+    private fun applyInternal(activity: Activity, dropInset: Boolean) {
         if (activity == null) {
             return
         }
@@ -62,13 +74,52 @@ internal object WindowImmersiveController {
             } else {
                 decor.findViewById<View>(android.R.id.content)
             }
-            if (content != null) {
+            if (content != null && dropInset) {
                 content.setOnApplyWindowInsetsListener(DROP_NAV_INSET)
                 if (fresh) {
                     content.requestApplyInsets()
                 }
             }
             clearDrawerStatusBarScrim(decor)
+            window.setNavigationBarColor(Color.TRANSPARENT)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                window.setNavigationBarDividerColor(Color.TRANSPARENT)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                window.setNavigationBarContrastEnforced(false)
+            }
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
+                WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
+            )
+            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
+        } catch (t: Throwable) {
+            LiquidGlassLog.logErr(
+                WindowImmersiveController::class.java.simpleName, t
+            )
+        }
+    }
+
+    /** fork 定制：给独立窗口（Dialog 等）做全量沉浸。
+     *  查看图片若是全屏 Dialog，它有自己的 Window，Activity 级沉浸够不着，
+     *  底部会留黑条；这里直接对 dialog 的 window 做同样的处理。 */
+    @JvmStatic
+    fun applyToWindow(window: Window?) {
+        if (window == null || !GlassConfig.immersiveGestureNavigation) {
+            return
+        }
+        try {
+            val decor = window.getDecorView() ?: return
+            decor.setSystemUiVisibility(
+                decor.getSystemUiVisibility() or
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            )
+            val content = decor.findViewById<View>(android.R.id.content)
+            if (content != null) {
+                content.setOnApplyWindowInsetsListener(DROP_NAV_INSET)
+                content.requestApplyInsets()
+            }
             window.setNavigationBarColor(Color.TRANSPARENT)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 window.setNavigationBarDividerColor(Color.TRANSPARENT)

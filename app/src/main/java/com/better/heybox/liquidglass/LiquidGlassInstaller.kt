@@ -97,6 +97,16 @@ object LiquidGlassInstaller {
         }
     }
 
+    /** fork 定制：非主界面的轻量沉浸（不清空导航条 inset，避免破坏页面布局）。 */
+    @JvmStatic
+    fun applyImmersiveLite(activity: Activity) {
+        try {
+            GlassConfig.load(activity)
+            WindowImmersiveController.applyLite(activity)
+        } catch (ignored: Throwable) {
+        }
+    }
+
     @Volatile
     private var sMainRef: WeakReference<Activity>? = null
 

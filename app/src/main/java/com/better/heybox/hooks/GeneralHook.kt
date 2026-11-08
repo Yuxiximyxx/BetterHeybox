@@ -12,13 +12,21 @@ import com.better.heybox.ForegroundTracker
 import com.better.heybox.LogRecorder
 import com.better.heybox.MainModule
 import com.better.heybox.liquidglass.LiquidGlassInstaller
+import com.better.heybox.liquidglass.WindowImmersiveController
 import java.lang.reflect.Method
 import java.util.concurrent.atomic.AtomicBoolean
 
 class GeneralHook(private val module: MainModule) {
 
+    private companion object {
+        val MEDIA_KEYWORDS = listOf(
+            "image", "photo", "preview", "gallery", "media", "picture", "browse"
+        )
+    }
+
     fun install(cl: ClassLoader) {
         hookFullImmersive(cl)
+        hookImageViewerDialog(cl)
         hookVersionNotice(cl)
         hookUpdateBlocking(cl)
         hookFakeNotification(cl)
@@ -42,10 +50,11 @@ class GeneralHook(private val module: MainModule) {
     }
 
     /**
-     * fork 定制：导航条沉浸做全界面。
-     * 上游只给主界面调 applyImmersive，帖子详情、查看图片等页面都不沉浸。
-     * 这里对进程内每个 Activity 的 onResume 都补一次 applyImmersive；
-     * 是否生效仍由设置里的「沉浸式手势导航」开关决定（apply 内部处理）。
+     * fork 定制：导航条沉浸做全界面（v0.10.1 分级）。
+     * v0.10.0 对所有页面都做全量沉浸（清零导航条 inset），把搜索页的
+     * 布局顶坏了（顶部搜索框消失）。改为分级：类名像图片/媒体查看页的
+     * 做全量，其余页面只做轻量沉浸（透明导航条、不动 inset）；
+     * 窗口重新获得焦点时再补一次，防止页面自己重置窗口标志。
      */
     private fun hookFullImmersive(cl: ClassLoader) {
         try {
@@ -54,16 +63,107 @@ class GeneralHook(private val module: MainModule) {
             module.hook(onResume).intercept { chain ->
                 val result = chain.proceed()
                 val activity = chain.instanceOrNull as? Activity
-                if (activity != null &&
-                    !activity.javaClass.name.startsWith("com.better.heybox")
-                ) {
-                    LiquidGlassInstaller.applyImmersive(activity)
+                if (activity != null) applyImmersiveGraded(activity)
+                result
+            }
+            val onFocus = activityClass.getDeclaredMethod(
+                "onWindowFocusChanged", Boolean::class.javaPrimitiveType
+            )
+            module.hook(onFocus).intercept { chain ->
+                val result = chain.proceed()
+                val activity = chain.instanceOrNull as? Activity
+                val hasFocus = chain.arg(0) as? Boolean
+                if (activity != null && hasFocus == true) {
+                    applyImmersiveGraded(activity)
                 }
                 result
             }
             module.logd(Log.INFO, MainModule.TAG, "✔ 全界面导航条沉浸 Hook 已安装（fork 定制）")
         } catch (t: Throwable) {
             module.logd(Log.ERROR, MainModule.TAG, "✘ 全界面导航条沉浸 Hook 失败", t)
+        }
+    }
+
+    private fun applyImmersiveGraded(activity: Activity) {
+        if (activity.javaClass.name.startsWith("com.better.heybox")) {
+            return
+        }
+        val name = activity.javaClass.name.lowercase()
+        val mediaLike = MEDIA_KEYWORDS.any { name.contains(it) }
+        if (mediaLike) {
+            LiquidGlassInstaller.applyImmersive(activity)
+        } else {
+            LiquidGlassInstaller.applyImmersiveLite(activity)
+        }
+    }
+
+    /**
+     * fork 定制：查看图片若是全屏 Dialog（独立 Window），Activity 级
+     * 沉浸够不着、底部会留黑条。这里 hook Dialog.show，对全屏且含
+     * 大图/翻页容器的 Dialog 单独给它的 Window 做全量沉浸。
+     */
+    private fun hookImageViewerDialog(cl: ClassLoader) {
+        try {
+            val dialogClass = Class.forName("android.app.Dialog", false, cl)
+            val show = dialogClass.getDeclaredMethod("show")
+            module.hook(show).intercept { chain ->
+                val result = chain.proceed()
+                val dialog = chain.instanceOrNull as? android.app.Dialog
+                val window = dialog?.window
+                val decor = window?.decorView
+                if (window != null && decor != null) {
+                    decor.post {
+                        if (isMediaViewer(decor)) {
+                            WindowImmersiveController.applyToWindow(window)
+                        }
+                    }
+                    decor.postDelayed({
+                        if (isMediaViewer(decor)) {
+                            WindowImmersiveController.applyToWindow(window)
+                        }
+                    }, 350L)
+                }
+                result
+            }
+            module.logd(Log.INFO, MainModule.TAG, "✔ 图片查看 Dialog 沉浸 Hook 已安装（fork 定制）")
+        } catch (t: Throwable) {
+            module.logd(Log.ERROR, MainModule.TAG, "✘ 图片查看 Dialog 沉浸 Hook 失败", t)
+        }
+    }
+
+    private fun isMediaViewer(decor: View): Boolean {
+        try {
+            val metrics = decor.resources.displayMetrics
+            if (decor.width < metrics.widthPixels * 0.85 ||
+                decor.height < metrics.heightPixels * 0.85
+            ) {
+                return false
+            }
+            var hasMedia = false
+            var hasInput = false
+            val stack = ArrayDeque<View>()
+            stack.addLast(decor)
+            var guard = 0
+            while (stack.isNotEmpty() && guard++ < 600) {
+                val v = stack.removeLast()
+                val cn = v.javaClass.name
+                if (cn.contains("ViewPager") ||
+                    (v is android.widget.ImageView &&
+                        v.width >= decor.width * 0.8 &&
+                        v.height >= decor.height * 0.5)
+                ) {
+                    hasMedia = true
+                }
+                if (v is android.widget.EditText) {
+                    hasInput = true
+                }
+                if (v is android.view.ViewGroup) {
+                    for (i in 0 until v.childCount) stack.addLast(v.getChildAt(i))
+                }
+            }
+            return hasMedia && !hasInput
+        } catch (t: Throwable) {
+            return false
         }
     }
 
