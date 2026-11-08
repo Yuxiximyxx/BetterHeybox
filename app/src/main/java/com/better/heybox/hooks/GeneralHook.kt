@@ -18,12 +18,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class GeneralHook(private val module: MainModule) {
 
-    private companion object {
-        val MEDIA_KEYWORDS = listOf(
-            "image", "photo", "preview", "gallery", "media", "picture", "browse"
-        )
-    }
-
     fun install(cl: ClassLoader) {
         hookFullImmersive(cl)
         hookImageViewerDialog(cl)
@@ -253,6 +247,9 @@ class GeneralHook(private val module: MainModule) {
     }
 
     companion object {
+        private val MEDIA_KEYWORDS = listOf(
+            "image", "photo", "preview", "gallery", "media", "picture", "browse"
+        )
         private val VERSION_NOTICE_SHOWN = AtomicBoolean(false)
         private val DOWNGRADE_NOTICE_SHOWN = AtomicBoolean(false)
         private val UPDATE_NOTICE_SHOWN = AtomicBoolean(false)
