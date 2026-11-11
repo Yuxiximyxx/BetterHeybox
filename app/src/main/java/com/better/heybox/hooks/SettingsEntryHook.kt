@@ -4609,6 +4609,7 @@ class SettingsEntryHook(private val module: MainModule) {
             ),
             SettingsGroup(
                 "通用", arrayOf(
+                    SwitchDef("扫一扫快捷方式", "长按小黑盒桌面图标，快速打开扫一扫", App.KEY_SCAN_SHORTCUT, false, false),
                     SwitchDef("伪装通知权限", "伪装通知已开启，获得签到加成", App.KEY_FAKE_NOTIFICATION, false, false),
                     SwitchDef("伪装使用情况权限",
                             "伪装「使用情况访问」已开启",
@@ -4763,7 +4764,7 @@ class SettingsEntryHook(private val module: MainModule) {
             )
             return SettingsGroup(
                 "底部导航栏", arrayOf(
-                    SwitchDef("禁止底栏热更新", "保留已有底栏策略和图标；仅支持 1.3.400 (1149)，重启生效", App.KEY_BLOCK_BOTTOM_TAB_UPDATE, false, true),
+                    SwitchDef("禁止底栏热更新", "保留已有底栏策略和图标；仅支持 1.3.400 (1149) 和 1.3.401 (1150)，重启生效", App.KEY_BLOCK_BOTTOM_TAB_UPDATE, false, true),
                     SwitchDef("隐藏「" + home + "」", null, App.KEY_HIDE_TAB_HOME, false, true),
                     SwitchDef("隐藏「" + slot2 + "」", null, App.KEY_HIDE_TAB_HOT, false, true),
                     SwitchDef("隐藏「" + slot4 + "」", null, App.KEY_HIDE_TAB_GAME, false, true),
